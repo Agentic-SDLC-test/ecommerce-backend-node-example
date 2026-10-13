@@ -10,6 +10,7 @@ interactive **OpenAPI / Swagger** documentation and a **Docker** setup.
 - Layered architecture: `config` / `models` / `controllers` / `routes` / `middleware` / `utils`
 - JWT authentication via the `x-auth-token` header, with `USER` / `ADMIN` roles
 - Products, categories, orders, wishlist, cart, admin dashboard, and image uploads
+- Verified-purchaser product reviews (ratings, editing, rating distribution) with admin moderation
 - Centralized configuration with **dotenv** and startup validation
 - Security & DX middleware: **helmet**, **cors**, **morgan** logging, and **rate limiting**
 - Consistent error handling and a `/health` probe
@@ -118,6 +119,12 @@ Admin-only routes additionally require the user's `userType` to be `ADMIN`.
 | GET    | `/admin/orders`          | Admin | List all orders                |
 | GET    | `/admin/order-status?orderId=&status=` | Admin | Update order status |
 | GET    | `/admin/users`           | Admin | List all users                 |
+| GET    | `/products/:id/reviews`  | –     | Rating summary, distribution and recent reviews (optional auth) |
+| POST   | `/reviews`               | User  | Submit a review (verified purchasers only) |
+| POST   | `/reviews/:id/update`    | User  | Edit your own review           |
+| GET    | `/admin/reviews`         | Admin | List all reviews               |
+| POST   | `/admin/reviews/:id/visibility` | Admin | Hide or show a review  |
+| POST   | `/admin/reviews/:id/delete` | Admin | Permanently delete a review |
 | POST   | `/photos/upload`         | –     | Upload an image (`photos` field) |
 | GET    | `/uploads/:filename`     | –     | Serve an uploaded image        |
 

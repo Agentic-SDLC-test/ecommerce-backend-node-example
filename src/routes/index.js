@@ -11,6 +11,7 @@ const wishlistRoutes = require('./wishlist.routes');
 const cartRoutes = require('./cart.routes');
 const adminRoutes = require('./admin.routes');
 const uploadRoutes = require('./upload.routes');
+const reviewRoutes = require('./review.routes');
 
 const router = express.Router();
 
@@ -38,5 +39,6 @@ router.use('/', wishlistRoutes);
 router.use('/', cartRoutes);
 router.use('/', adminRoutes);
 router.use('/', uploadRoutes);
+router.use('/', reviewRoutes);
 
 module.exports = router;
