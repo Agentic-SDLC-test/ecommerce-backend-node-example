@@ -12,6 +12,11 @@ const checkout = asyncHandler(async (req, res) => {
   const body = req.body;
   body.user = req.user?._id;
   body.orderId = Math.floor(Math.random() * 1000000000).toString();
+  // A verified-purchase review requires an order's delivered status to be
+  // set by an admin, not chosen by the client that creates it.
+  body.status = 'pending';
+  delete body.shippedOn;
+  delete body.deliveredOn;
 
   if (!body.items || body.items.length === 0) {
     return res.json({ success: false, message: 'pass correct parameters' });
