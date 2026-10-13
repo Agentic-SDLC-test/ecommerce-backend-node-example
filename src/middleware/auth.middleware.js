@@ -70,4 +70,29 @@ async function isAdmin(req, res, next) {
   }
 }
 
-module.exports = { checkAuth, isAdmin, extractToken };
+/**
+ * Resolves a valid JWT to `req.currentUser` / `req.user` when present, and
+ * continues anonymously (never responds 401) on a missing or invalid token.
+ * Used by public reads that personalize their response for a signed-in caller.
+ */
+async function optionalAuth(req, res, next) {
+  const token = extractToken(req);
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret);
+    const user = await User.findOne({ _id: decoded?._id }).select('-password');
+    if (user) {
+      req.user = decoded;
+      req.currentUser = user;
+    }
+    return next();
+  } catch (error) {
+    return next();
+  }
+}
+
+module.exports = { checkAuth, isAdmin, optionalAuth, extractToken };

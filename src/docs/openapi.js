@@ -29,6 +29,7 @@ const openapiSpec = {
     { name: 'Wishlist', description: 'User wishlist' },
     { name: 'Cart', description: 'Server-side cart (optional)' },
     { name: 'Admin', description: 'Admin-only dashboard, users and orders' },
+    { name: 'Reviews', description: 'Verified-purchaser product reviews and moderation' },
     { name: 'Uploads', description: 'Image uploads' },
     { name: 'System', description: 'Health and diagnostics' },
   ],
@@ -108,6 +109,62 @@ const openapiSpec = {
           payment_type: { type: 'string', enum: ['cod', 'online'] },
           shippedOn: { type: 'string' },
           deliveredOn: { type: 'string' },
+        },
+      },
+      PublicReview: {
+        type: 'object',
+        description: 'Never contains the reviewer user id or email.',
+        properties: {
+          _id: { type: 'string' },
+          rating: { type: 'number' },
+          comment: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+          edited: { type: 'boolean' },
+          verifiedPurchase: { type: 'boolean' },
+          user: { type: 'object', properties: { name: { type: 'string', example: 'John D.' } } },
+        },
+      },
+      OwnReview: {
+        allOf: [
+          { $ref: '#/components/schemas/PublicReview' },
+          { type: 'object', properties: { visible: { type: 'boolean' } } },
+        ],
+      },
+      AdminReview: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string' },
+          productId: { type: 'string' },
+          productTitle: { type: 'string' },
+          user: {
+            type: 'object',
+            properties: { _id: { type: 'string' }, name: { type: 'string', example: 'John Doe' } },
+          },
+          rating: { type: 'number' },
+          comment: { type: 'string' },
+          visible: { type: 'boolean' },
+          edited: { type: 'boolean' },
+          editedAt: { type: 'string', format: 'date-time', nullable: true },
+          verifiedPurchase: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ReviewSummary: {
+        type: 'object',
+        properties: {
+          averageRating: { type: 'number' },
+          totalCount: { type: 'number' },
+          distribution: {
+            type: 'object',
+            properties: {
+              '1': { type: 'number' },
+              '2': { type: 'number' },
+              '3': { type: 'number' },
+              '4': { type: 'number' },
+              '5': { type: 'number' },
+            },
+          },
         },
       },
     },
@@ -470,6 +527,147 @@ const openapiSpec = {
         summary: 'List all users (admin)',
         security: [{ authToken: [] }],
         responses: { 200: { description: 'All users' } },
+      },
+    },
+
+    '/products/{id}/reviews': {
+      get: {
+        tags: ['Reviews'],
+        summary: 'Get a product\'s rating summary, distribution and recent reviews',
+        description:
+          'Public, with optional auth. An invalid or expired token is treated as anonymous.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: {
+            description: 'Reviews, rating summary and the caller\'s own review (when authenticated)',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/ReviewSummary' },
+                    {
+                      type: 'object',
+                      properties: {
+                        success: { type: 'boolean' },
+                        reviews: { type: 'array', items: { $ref: '#/components/schemas/PublicReview' } },
+                        isEligible: { type: 'boolean' },
+                        hasReviewed: { type: 'boolean' },
+                        myReview: { $ref: '#/components/schemas/OwnReview' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid product id' },
+          404: { description: 'Product not found' },
+        },
+      },
+    },
+    '/reviews': {
+      post: {
+        tags: ['Reviews'],
+        summary: 'Submit a review for a product (verified purchasers only)',
+        security: [{ authToken: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId', 'rating'],
+                properties: {
+                  productId: { type: 'string' },
+                  rating: { type: 'integer', minimum: 1, maximum: 5 },
+                  comment: { type: 'string', maxLength: 500 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Review created', content: { 'application/json': { schema: { $ref: '#/components/schemas/OwnReview' } } } },
+          400: { description: 'Validation error' },
+          403: { description: 'Not eligible to review this product' },
+          404: { description: 'Product not found' },
+          409: { description: 'A review for this product already exists' },
+        },
+      },
+    },
+    '/reviews/{id}/update': {
+      post: {
+        tags: ['Reviews'],
+        summary: 'Edit your own review',
+        security: [{ authToken: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['rating'],
+                properties: {
+                  rating: { type: 'integer', minimum: 1, maximum: 5 },
+                  comment: { type: 'string', maxLength: 500 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Review updated; visibility is left unchanged', content: { 'application/json': { schema: { $ref: '#/components/schemas/OwnReview' } } } },
+          400: { description: 'Validation error' },
+          403: { description: 'Not the review author' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
+    '/admin/reviews': {
+      get: {
+        tags: ['Reviews'],
+        summary: 'List all reviews, visible and hidden (admin)',
+        security: [{ authToken: [] }],
+        responses: {
+          200: {
+            description: 'All reviews',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'array', items: { $ref: '#/components/schemas/AdminReview' } } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/admin/reviews/{id}/visibility': {
+      post: {
+        tags: ['Reviews'],
+        summary: 'Hide or show a review (admin)',
+        security: [{ authToken: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', required: ['visible'], properties: { visible: { type: 'boolean' } } } } },
+        },
+        responses: {
+          200: { description: 'Visibility updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminReview' } } } },
+          400: { description: 'visible must be a boolean' },
+          404: { description: 'Review not found' },
+        },
+      },
+    },
+    '/admin/reviews/{id}/delete': {
+      post: {
+        tags: ['Reviews'],
+        summary: 'Permanently delete a review (admin)',
+        security: [{ authToken: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Review deleted' },
+          404: { description: 'Review not found' },
+        },
       },
     },
 
