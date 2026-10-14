@@ -1,7 +1,9 @@
 'use strict';
 
 const Product = require('../models/product.model');
+const Review = require('../models/review.model');
 const asyncHandler = require('../utils/asyncHandler');
+const logger = require('../utils/logger');
 
 /**
  * GET /products?search=:term
@@ -71,6 +73,11 @@ const deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findByIdAndDelete(id);
   if (!product) {
     return res.json({ success: false, message: 'product does not exist' });
+  }
+
+  const { deletedCount } = await Review.deleteMany({ product: id });
+  if (deletedCount > 0) {
+    logger.info(`review.cascade scope=product id=${id} deleted=${deletedCount}`);
   }
 
   return res.json({ success: true, message: 'product deleted successfully' });

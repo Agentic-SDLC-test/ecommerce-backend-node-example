@@ -3,8 +3,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const Review = require('../models/review.model');
 const { config } = require('../config/env');
 const asyncHandler = require('../utils/asyncHandler');
+const logger = require('../utils/logger');
 
 const SALT_ROUNDS = 10;
 
@@ -115,6 +117,11 @@ const deleteUser = asyncHandler(async (req, res) => {
   const deleted = await User.findByIdAndDelete(id);
   if (!deleted) {
     return res.json({ success: false, message: 'user does not exist' });
+  }
+
+  const { deletedCount } = await Review.deleteMany({ user: id });
+  if (deletedCount > 0) {
+    logger.info(`review.cascade scope=user id=${id} deleted=${deletedCount}`);
   }
 
   return res.json({ success: true, message: 'user deleted successfully' });

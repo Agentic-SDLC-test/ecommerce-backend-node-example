@@ -4,7 +4,11 @@ const Order = require('../models/order.model');
 const User = require('../models/user.model');
 const Product = require('../models/product.model');
 const Category = require('../models/category.model');
+const Review = require('../models/review.model');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/ApiError');
+const logger = require('../utils/logger');
+const { parseObjectId, parsePaging, toAdminReview } = require('../utils/review.helpers');
 
 const VALID_STATUSES = ['pending', 'shipped', 'delivered'];
 
@@ -91,9 +95,91 @@ const changeStatusOfOrder = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /admin/reviews?visibility=all|visible|hidden&limit=&skip=   (admin)
+ */
+const getAllReviews = asyncHandler(async (req, res) => {
+  const visibility = req.query.visibility || 'all';
+  if (!['all', 'visible', 'hidden'].includes(visibility)) {
+    throw ApiError.badRequest('Invalid visibility');
+  }
+
+  let filter = {};
+  if (visibility === 'visible') filter = { hidden: false };
+  if (visibility === 'hidden') filter = { hidden: true };
+
+  const { limit, skip } = parsePaging(req.query, 20);
+
+  const [docs, total] = await Promise.all([
+    Review.find(filter)
+      .sort({ postedAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('user', 'name')
+      .populate('product', 'title'),
+    Review.countDocuments(filter),
+  ]);
+
+  return res.json({
+    success: true,
+    message: 'all reviews',
+    data: { reviews: docs.map(toAdminReview), total },
+  });
+});
+
+/**
+ * POST /admin/review-visibility?id=&hidden=true|false   (admin)
+ */
+const setReviewVisibility = asyncHandler(async (req, res) => {
+  const id = parseObjectId(req.query.id, 'id');
+
+  if (req.query.hidden !== 'true' && req.query.hidden !== 'false') {
+    throw ApiError.badRequest('Invalid hidden value');
+  }
+  const hidden = req.query.hidden === 'true';
+
+  const doc = await Review.findByIdAndUpdate(id, { hidden }, { new: true })
+    .populate('user', 'name')
+    .populate('product', 'title');
+  if (!doc) {
+    throw ApiError.notFound('Review not found');
+  }
+
+  if (hidden) {
+    logger.info(`review.hidden reviewId=${id} adminId=${req.user._id}`);
+  } else {
+    logger.info(`review.unhidden reviewId=${id} adminId=${req.user._id}`);
+  }
+
+  return res.json({
+    success: true,
+    message: hidden ? 'Review hidden' : 'Review visible',
+    data: toAdminReview(doc),
+  });
+});
+
+/**
+ * POST /admin/delete-review?id=   (admin)
+ */
+const deleteReview = asyncHandler(async (req, res) => {
+  const id = parseObjectId(req.query.id, 'id');
+
+  const doc = await Review.findByIdAndDelete(id);
+  if (!doc) {
+    throw ApiError.notFound('Review not found');
+  }
+
+  logger.info(`review.deleted reviewId=${id} adminId=${req.user._id}`);
+
+  return res.json({ success: true, message: 'Review removed' });
+});
+
 module.exports = {
   dashboardData,
   getAllUsers,
   getAllOrders,
   changeStatusOfOrder,
+  getAllReviews,
+  setReviewVisibility,
+  deleteReview,
 };
