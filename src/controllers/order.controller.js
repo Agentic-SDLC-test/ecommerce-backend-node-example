@@ -3,6 +3,7 @@
 const Order = require('../models/order.model');
 const Product = require('../models/product.model');
 const asyncHandler = require('../utils/asyncHandler');
+const logger = require('../utils/logger');
 
 /**
  * POST /checkout   (auth)
@@ -17,7 +18,24 @@ const checkout = asyncHandler(async (req, res) => {
     return res.json({ success: false, message: 'pass correct parameters' });
   }
 
+  const type = body.payment_type || 'cod';
+  if (!['cod', 'online'].includes(type)) {
+    logger.warn(`Checkout rejected: invalid payment type ${type}`);
+    return res.status(400).json({ success: false, message: 'Invalid payment type' });
+  }
+  if (type === 'online' && body.payment_status !== 'paid') {
+    logger.warn(`Checkout rejected: online payment_status=${body.payment_status}`);
+    return res
+      .status(400)
+      .json({ success: false, message: 'Online payments must be paid before the order is placed' });
+  }
+  body.payment_type = type;
+  body.payment_status = type === 'cod' ? 'pending' : body.payment_status;
+
   const order = await Order.create(body);
+  logger.info(
+    `Checkout: order ${order.orderId} payment_type=${order.payment_type} payment_status=${order.payment_status}`
+  );
 
   // Decrement stock for each purchased item.
   await Promise.all(
